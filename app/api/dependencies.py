@@ -41,7 +41,12 @@ state = AppState()
 def load_data() -> pd.DataFrame:
     """Load processed daily metrics. Run preprocessing if file missing."""
     path = Path(settings.processed_data_path)
-    if not path.exists():
+    if path.exists():
+        daily = pd.read_csv(path, index_col="date", parse_dates=True)
+        return daily
+
+    raw_path = Path(settings.raw_data_path)
+    if raw_path.exists():
         logger.info("Processed data not found, running preprocessing pipeline...")
         from app.preprocessing.aggregator import aggregate_daily
         from app.preprocessing.cleaner import load_and_clean
@@ -50,8 +55,15 @@ def load_data() -> pd.DataFrame:
         daily = aggregate_daily(df)
         path.parent.mkdir(parents=True, exist_ok=True)
         daily.to_csv(path)
-    else:
-        daily = pd.read_csv(path, index_col="date", parse_dates=True)
+        return daily
+
+    # Fallback: generate synthetic data (useful for CI / demo)
+    logger.warning("No data files found, generating synthetic dataset...")
+    from scripts.generate_synthetic import generate_synthetic
+
+    daily = generate_synthetic(days=730, seed=42)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    daily.to_csv(path)
     return daily
 
 
