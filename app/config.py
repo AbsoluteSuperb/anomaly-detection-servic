@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     iqr_warning_multiplier: float = 1.5
     iqr_critical_multiplier: float = 3.0
 
+    # CUSUM detector
+    cusum_drift_factor: float = 0.5
+    cusum_warning_factor: float = 4.0
+    cusum_critical_factor: float = 6.0
+
     # Prophet detector
     prophet_interval_warning: float = 0.95
     prophet_interval_critical: float = 0.99

@@ -107,6 +107,8 @@ def _run_univariate(metric: str, detector_name: str) -> list[Anomaly]:
         return state.zscore[metric].detect(series)
     elif detector_name == "iqr":
         return state.iqr[metric].detect(series)
+    elif detector_name == "cusum":
+        return state.cusum[metric].detect(series)
     elif detector_name == "prophet":
         p = get_prophet_detector(metric)
         return p.detect(series)
@@ -126,7 +128,8 @@ def _run_detection(req: DetectionRequest) -> list[Anomaly]:
         for m in metrics:
             all_anomalies.append(_run_univariate(m, "zscore"))
             all_anomalies.append(_run_univariate(m, "iqr"))
-        # Add isolation forest
+            all_anomalies.append(_run_univariate(m, "cusum"))
+        # Add isolation forest (multivariate)
         active = get_active_daily()
         all_anomalies.append(state.iforest.detect(active))
 

@@ -11,6 +11,7 @@ import pandas as pd
 
 from app.config import settings
 from app.detection.base import Anomaly
+from app.detection.cusum_detector import CUSUMDetector
 from app.detection.iqr_detector import IQRDetector
 from app.detection.isolation_forest import IsolationForestDetector
 from app.detection.zscore_detector import ZScoreDetector
@@ -18,7 +19,9 @@ from app.detection.zscore_detector import ZScoreDetector
 logger = logging.getLogger(__name__)
 
 UNIVARIATE_METRICS = ["revenue", "orders", "avg_check", "unique_customers", "items_sold"]
-AVAILABLE_DETECTORS = ["zscore", "iqr", "prophet", "isolation_forest", "ensemble"]
+AVAILABLE_DETECTORS = [
+    "zscore", "iqr", "cusum", "prophet", "isolation_forest", "ensemble",
+]
 
 
 @dataclass
@@ -26,8 +29,8 @@ class AppState:
     daily: pd.DataFrame | None = None
     zscore: dict[str, ZScoreDetector] = field(default_factory=dict)
     iqr: dict[str, IQRDetector] = field(default_factory=dict)
+    cusum: dict[str, CUSUMDetector] = field(default_factory=dict)
     iforest: IsolationForestDetector | None = None
-    # Prophet is fitted lazily on first /detect call (slow import + fit)
     _prophet_fitted: dict[str, object] = field(default_factory=dict)
     anomaly_cache: list[Anomaly] = field(default_factory=list)
 
@@ -53,7 +56,7 @@ def load_data() -> pd.DataFrame:
 
 
 def fit_detectors(daily: pd.DataFrame) -> None:
-    """Fit Z-Score, IQR and Isolation Forest detectors on all metrics."""
+    """Fit Z-Score, IQR, CUSUM and Isolation Forest detectors."""
     active = daily[~daily["missing_day"].astype(bool)]
 
     for metric in UNIVARIATE_METRICS:
@@ -79,6 +82,16 @@ def fit_detectors(daily: pd.DataFrame) -> None:
         iq.fit(series)
         state.iqr[metric] = iq
         logger.info("Fitted IQR/%s in %.0f ms", metric, (time.perf_counter() - t0) * 1000)
+
+        t0 = time.perf_counter()
+        cu = CUSUMDetector(
+            drift_factor=settings.cusum_drift_factor,
+            warning_factor=settings.cusum_warning_factor,
+            critical_factor=settings.cusum_critical_factor,
+        )
+        cu.fit(series)
+        state.cusum[metric] = cu
+        logger.info("Fitted CUSUM/%s in %.0f ms", metric, (time.perf_counter() - t0) * 1000)
 
     # Isolation Forest (multivariate)
     t0 = time.perf_counter()

@@ -3,6 +3,7 @@ from dataclasses import replace
 import pandas as pd
 
 from app.detection.base import Anomaly, Severity
+from app.detection.cusum_detector import CUSUMDetector
 from app.detection.ensemble import EnsembleDetector
 from app.detection.iqr_detector import IQRDetector
 from app.detection.isolation_forest import IsolationForestDetector
@@ -92,6 +93,68 @@ class TestIQR:
         recall = len(hits) / len(point_dates) if point_dates else 1.0
         # IQR is less sensitive than Z-score on point anomalies in noisy data
         assert recall >= 0.40, f"Recall on point anomalies too low: {recall:.2%}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  CUSUMDetector
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCUSUM:
+    def test_returns_anomaly_objects(self, sample_series):
+        d = CUSUMDetector().fit(sample_series)
+        results = d.detect(sample_series)
+        assert isinstance(results, list)
+        assert all(isinstance(a, Anomaly) for a in results)
+
+    def test_detects_spike(self, sample_series):
+        d = CUSUMDetector().fit(sample_series)
+        dates = {a.date for a in d.detect(sample_series)}
+        assert "2023-02-20" in dates  # the big spike at index 50
+
+    def test_detects_level_shift(self):
+        """CUSUM should detect a sustained level shift."""
+        import numpy as np
+
+        rng = np.random.default_rng(42)
+        dates = pd.date_range("2023-01-01", periods=200, freq="D")
+        values = rng.normal(1000, 50, 200)
+        # Level shift: mean jumps from 1000 to 1300 at day 120
+        values[120:] += 300
+        s = pd.Series(values, index=dates, name="test_metric")
+
+        d = CUSUMDetector(drift_factor=0.5, warning_factor=4.0, critical_factor=6.0)
+        d.fit(s[:120])  # fit on pre-shift data
+        results = d.detect(s)
+        shift_dates = {a.date for a in results if a.date >= "2023-04-30"}
+        assert len(shift_dates) > 0, "CUSUM should detect the level shift"
+
+    def test_low_fpr_on_clean_data(self, normal_series):
+        """False positive rate < 10% on clean data."""
+        d = CUSUMDetector().fit(normal_series)
+        results = d.detect(normal_series)
+        fpr = len(results) / len(normal_series)
+        assert fpr < 0.10, f"FPR too high: {fpr:.2%}"
+
+    def test_severity_critical_for_large_shift(self):
+        """A large sustained shift should produce CRITICAL severity."""
+        import numpy as np
+
+        rng = np.random.default_rng(7)
+        dates = pd.date_range("2023-01-01", periods=150, freq="D")
+        values = rng.normal(1000, 30, 150)
+        values[100:] += 500  # huge shift
+        s = pd.Series(values, index=dates, name="test_metric")
+
+        d = CUSUMDetector().fit(s[:100])
+        results = d.detect(s)
+        severities = {a.severity for a in results}
+        assert Severity.CRITICAL in severities
+
+    def test_details_contain_direction(self, sample_series):
+        d = CUSUMDetector().fit(sample_series)
+        results = d.detect(sample_series)
+        for a in results:
+            assert "upward" in a.details or "downward" in a.details
 
 
 # ═══════════════════════════════════════════════════════════════════════════
