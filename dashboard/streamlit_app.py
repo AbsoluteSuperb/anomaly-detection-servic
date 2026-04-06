@@ -5,10 +5,10 @@ Launch: streamlit run dashboard/streamlit_app.py
 Requires the API to be running at API_URL (default http://localhost:8000).
 """
 
-import streamlit as st
-import requests
 import pandas as pd
 import plotly.graph_objects as go
+import requests
+import streamlit as st
 
 API_URL = "http://localhost:8000/api/v1"
 
@@ -134,7 +134,8 @@ elif page == "Metric Explorer":
                                             "start_date": str(start),
                                             "end_date": str(end)})
         if anomalies:
-            for sev, color, sym in [("critical", "#DC3545", "x"), ("warning", "#FFC107", "diamond")]:
+            severity_styles = [("critical", "#DC3545", "x"), ("warning", "#FFC107", "diamond")]
+            for sev, color, sym in severity_styles:
                 pts = [a for a in anomalies if a["severity"] == sev]
                 if pts:
                     fig.add_trace(go.Scatter(
