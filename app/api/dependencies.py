@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from app.config import settings
@@ -62,6 +63,22 @@ def load_data() -> pd.DataFrame:
     from scripts.generate_synthetic import generate_synthetic
 
     daily = generate_synthetic(days=730, seed=42)
+    rng = np.random.default_rng(42)
+    n = len(daily)
+    if "unique_customers" not in daily.columns:
+        daily["unique_customers"] = (daily["orders"] * rng.uniform(0.6, 0.9, n)).astype(int)
+    if "items_sold" not in daily.columns:
+        daily["items_sold"] = (daily["orders"] * rng.uniform(1.5, 3.0, n)).astype(int)
+    if "avg_items_per_order" not in daily.columns:
+        daily["avg_items_per_order"] = np.round(daily["items_sold"] / daily["orders"], 2)
+    if "unique_products" not in daily.columns:
+        daily["unique_products"] = (daily["orders"] * rng.uniform(0.8, 1.2, n)).astype(int)
+    if "missing_day" not in daily.columns:
+        daily["missing_day"] = False
+    if "day_of_week" not in daily.columns:
+        daily["day_of_week"] = daily.index.dayofweek
+    if "is_weekend" not in daily.columns:
+        daily["is_weekend"] = daily["day_of_week"] >= 5
     path.parent.mkdir(parents=True, exist_ok=True)
     daily.to_csv(path)
     return daily
